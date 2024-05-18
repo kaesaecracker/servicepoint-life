@@ -1,18 +1,18 @@
 use std::io::stdout;
+use std::thread;
 use std::time::Duration;
-use std::{io, thread};
 
 use clap::Parser;
+use crossterm::{event, execute, queue};
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use crossterm::style::{Print, PrintStyledContent, Stylize};
-use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::{event, execute};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnableLineWrap, EnterAlternateScreen, LeaveAlternateScreen};
 use log::LevelFilter;
 use rand::{distributions, Rng};
-use servicepoint2::Command::{BitmapLinearWin, CharBrightness};
 use servicepoint2::{
-    ByteGrid, CompressionCode, Connection, Origin, PixelGrid, PIXEL_WIDTH, TILE_HEIGHT, TILE_WIDTH,
+    ByteGrid, CompressionCode, Connection, Origin, PIXEL_WIDTH, PixelGrid, TILE_HEIGHT, TILE_WIDTH,
 };
+use servicepoint2::Command::{BitmapLinearWin, CharBrightness};
 
 use crate::game::Game;
 
@@ -39,9 +39,9 @@ fn main() {
     let connection = Connection::open(&cli.destination)
         .expect("Could not connect. Did you forget `--destination`?");
 
-    let entered_alternate = execute!(io::stdout(), EnterAlternateScreen).is_ok();
+    let entered_alternate = execute!(stdout(), EnterAlternateScreen, EnableLineWrap).is_ok();
 
-    crossterm::terminal::enable_raw_mode().expect("could not enable raw terminal mode");
+    enable_raw_mode().expect("could not enable raw terminal mode");
 
     let mut left = Game::default();
     let mut right = Game::default();
@@ -100,38 +100,23 @@ fn main() {
                 Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
                     match key_event.code {
                         KeyCode::Char('h') => {
-                            execute!(
-                                stdout(),
-                                Print("h for help\r\n"),
-                                Print("q to quit\r\n"),
-                                Print("a to reset left field\r\n"),
-                                Print("d to reset right field\r\n")
-                            )
-                            .unwrap();
+                            println_info("[h] help");
+                            println_info("[q] quit");
+                            println_info("[a] reset left field");
+                            println_info("[d] reset right field");
+                            println_info("[→] move divider right");
+                            println_info("[←] move divider left");
                         }
                         KeyCode::Char('q') => {
-                            execute!(stdout(), PrintStyledContent("terminating\r\n".red()))
-                                .unwrap();
+                            println_warning("terminating");
                             close_requested = true;
                         }
                         KeyCode::Char('a') => {
-                            execute!(
-                                stdout(),
-                                PrintStyledContent(
-                                    "generating new random field for left\r\n".grey()
-                                )
-                            )
-                            .unwrap();
+                            println_debug("generating new random field for left");
                             left = make_random_field(cli.probability);
                         }
                         KeyCode::Char('d') => {
-                            execute!(
-                                stdout(),
-                                PrintStyledContent(
-                                    "generating new random field for right\r\n".grey()
-                                )
-                            )
-                            .unwrap();
+                            println_info("generating new random field for right");
                             right = make_random_field(cli.probability);
                         }
                         KeyCode::Right => {
@@ -141,22 +126,12 @@ fn main() {
                             split_pixel -= 1;
                         }
                         key_code => {
-                            execute!(
-                                stdout(),
-                                PrintStyledContent(
-                                    format!("unhandled KeyCode {key_code:?}\r\n").dark_grey()
-                                )
-                            )
-                            .unwrap();
+                            println_debug(format!("unhandled KeyCode {key_code:?}"));
                         }
                     }
                 }
                 event => {
-                    execute!(
-                        stdout(),
-                        PrintStyledContent(format!("unhandled event {event:?}\r\n").dark_grey()),
-                    )
-                    .unwrap();
+                    println_debug(format!("unhandled event {event:?}"));
                 }
             }
         }
@@ -164,11 +139,27 @@ fn main() {
         thread::sleep(Duration::from_millis(30));
     }
 
-    crossterm::terminal::disable_raw_mode().expect("could not disable raw terminal mode");
+    disable_raw_mode().expect("could not disable raw terminal mode");
 
     if entered_alternate {
         execute!(stdout(), LeaveAlternateScreen).expect("could not leave alternate screen");
     }
+}
+
+fn println_info(text: impl Into<String>) {
+    println_command(PrintStyledContent(text.into().white()))
+}
+
+fn println_debug(text: impl Into<String>) {
+    println_command(PrintStyledContent(text.into().grey()))
+}
+
+fn println_warning(text: impl Into<String>) {
+    println_command(PrintStyledContent(text.into().red()))
+}
+
+fn println_command(command: impl crossterm::Command) {
+    queue!(stdout(), command, Print("\r\n"));
 }
 
 fn make_random_field(probability: f64) -> Game {
