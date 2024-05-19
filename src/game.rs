@@ -4,6 +4,7 @@ use servicepoint2::{ByteGrid, PixelGrid, TILE_HEIGHT, TILE_WIDTH};
 pub(crate) struct Game {
     pub field: PixelGrid,
     pub luma: ByteGrid,
+    pub high_life: Option<bool>,
 }
 
 impl Game {
@@ -24,8 +25,16 @@ impl Game {
                 let old_state = self.field.get(x, y);
                 let neighbors = self.count_neighbors(x, y);
 
-                let new_state =
-                    matches!((old_state, neighbors), (true, 2) | (true, 3) | (false, 3));
+                let new_state = match (old_state, neighbors) {
+                    (true, 2) | (true, 3) | (false, 3) => true,
+                    (false, 6) => match self.high_life {
+                        None => false,
+                        Some(true) => true,
+                        Some(false) => self.luma.get(x / 8, y / 8) > 128
+                    },
+                    _ => false,
+                };
+
                 next.set(x, y, new_state);
             }
         }
@@ -96,6 +105,7 @@ impl Default for Game {
         Self {
             field: PixelGrid::max_sized(),
             luma: ByteGrid::new(TILE_WIDTH as usize, TILE_HEIGHT as usize),
+            high_life: None,
         }
     }
 }

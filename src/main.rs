@@ -6,7 +6,9 @@ use clap::Parser;
 use crossterm::{event, execute, queue};
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use crossterm::style::{Print, PrintStyledContent, Stylize};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnableLineWrap, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnableLineWrap, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use log::LevelFilter;
 use rand::{distributions, Rng};
 use servicepoint2::{
@@ -24,8 +26,6 @@ struct Cli {
     destination: String,
     #[arg(short, long, default_value_t = 0.4f64)]
     probability: f64,
-    #[arg(short, long, default_value_t = true)]
-    extended: bool,
 }
 
 // TODO: itsa spaghetti! 👌
@@ -50,6 +50,7 @@ fn main() {
     let mut luma = ByteGrid::new(TILE_WIDTH as usize, TILE_HEIGHT as usize);
 
     let mut split_pixel = PIXEL_WIDTH as usize / 2;
+    let mut high_life = Option::None;
 
     let mut close_requested = false;
     while !close_requested {
@@ -104,6 +105,7 @@ fn main() {
                             println_info("[q] quit");
                             println_info("[a] reset left field");
                             println_info("[d] reset right field");
+                            println_info("[l] toggle high life rules for bright tiles");
                             println_info("[→] move divider right");
                             println_info("[←] move divider left");
                         }
@@ -113,11 +115,29 @@ fn main() {
                         }
                         KeyCode::Char('a') => {
                             println_debug("generating new random field for left");
-                            left = make_random_field(cli.probability);
+                            left = make_random_field(cli.probability, high_life);
                         }
                         KeyCode::Char('d') => {
                             println_info("generating new random field for right");
-                            right = make_random_field(cli.probability);
+                            right = make_random_field(cli.probability, high_life);
+                        }
+                        KeyCode::Char('l') => {
+                            high_life = match high_life {
+                                None => Some(false),
+                                Some(false) => Some(true),
+                                Some(true) => None,
+                            };
+                            let state_formatted = match high_life {
+                                None => "disabled".red(),
+                                Some(false) => "enabled where bright".yellow(),
+                                Some(true) => "enabled everywhere".green()
+                            };
+                            left.high_life = high_life;
+                            right.high_life = high_life;
+                            queue!(stdout(), 
+                                Print("new high life state: "), 
+                                PrintStyledContent(state_formatted), 
+                                Print("\r\n"));
                         }
                         KeyCode::Right => {
                             split_pixel += 1;
@@ -162,7 +182,7 @@ fn println_command(command: impl crossterm::Command) {
     queue!(stdout(), command, Print("\r\n"));
 }
 
-fn make_random_field(probability: f64) -> Game {
+fn make_random_field(probability: f64, high_life: Option<bool>) -> Game {
     let mut field = PixelGrid::max_sized();
     let mut rng = rand::thread_rng();
     let d = distributions::Bernoulli::new(probability).unwrap();
@@ -179,5 +199,5 @@ fn make_random_field(probability: f64) -> Game {
         }
     }
 
-    Game { field, luma }
+    Game { field, luma, high_life }
 }
