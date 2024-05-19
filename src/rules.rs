@@ -1,11 +1,14 @@
-use rand::Rng;
+use rand::{Rng, thread_rng};
+use rand::rngs::ThreadRng;
+
+use crate::print::println_info;
 
 pub struct Rules<TState, TKernel, const KERNEL_SIZE: usize>
     where TState: Copy + PartialEq, TKernel: Copy
 {
     pub kernel: [[TKernel; KERNEL_SIZE]; KERNEL_SIZE],
     pub count_neighbor: fn(neighbor_state: TState, kernel_value: TKernel) -> i32,
-    pub next_state: fn(state: TState, kernel_result: i32) -> TState,
+    pub next_state: Box<dyn Fn(TState, i32) -> TState>,
 }
 
 pub const MOORE_NEIGHBORHOOD: [[bool; 3]; 3] = [
@@ -34,52 +37,57 @@ pub fn count_true_neighbor(neighbor_state: bool, kernel_value: bool) -> i32
 impl Rules<bool, bool, 3> {
     #[must_use]
     pub fn random_bb3() -> Self {
-        match rand::thread_rng().gen_range(0..=4) {
+        match rand::thread_rng().gen_range(0..=5) {
             0 => Self::game_of_life(),
             1 => Self::high_life(),
             2 => Self::seeds(),
             3 => Self::day_and_night(),
             4 => Self::mazecetric(),
+            5 => Self::generate_bb3_moore(),
             _ => panic!(),
         }
     }
 
     #[must_use]
     pub fn game_of_life() -> Self {
+        println_info("game of life");
         Self {
             kernel: MOORE_NEIGHBORHOOD,
             count_neighbor: count_true_neighbor,
-            next_state: |old_state, neighbors|
-                matches!((old_state, neighbors), (true, 2) | (true, 3) | (false, 3)),
+            next_state: Box::new(|old_state, neighbors|
+                matches!((old_state, neighbors), (true, 2) | (true, 3) | (false, 3))),
         }
     }
 
     #[must_use]
     pub fn high_life() -> Self {
+        println_info("high life");
         Self {
             kernel: MOORE_NEIGHBORHOOD,
             count_neighbor: count_true_neighbor,
-            next_state: |old_state, neighbors|
-                matches!((old_state, neighbors), (true, 2) | (true, 3) | (false, 3)| (false, 6)),
+            next_state: Box::new(|old_state, neighbors|
+                matches!((old_state, neighbors), (true, 2) | (true, 3) | (false, 3)| (false, 6))),
         }
     }
 
     #[must_use]
     pub fn seeds() -> Self {
+        println_info("seeds");
         Self {
             kernel: MOORE_NEIGHBORHOOD,
             count_neighbor: count_true_neighbor,
-            next_state: |state, neighbors|
-                matches!((state, neighbors), (false, 2)),
+            next_state: Box::new(|state, neighbors|
+                matches!((state, neighbors), (false, 2))),
         }
     }
 
     #[must_use]
     pub fn day_and_night() -> Self {
+        println_info("day_and_night");
         Self {
             kernel: MOORE_NEIGHBORHOOD,
             count_neighbor: count_true_neighbor,
-            next_state: |state, neighbors| {
+            next_state: Box::new(|state, neighbors| {
                 match (state, neighbors) {
                     (false, 3) => true,
                     (false, 6) => true,
@@ -92,24 +100,62 @@ impl Rules<bool, bool, 3> {
                     (true, 8) => true,
                     _ => false,
                 }
-            },
+            }),
         }
     }
 
     #[must_use]
     pub fn mazecetric() -> Self {
+        println_info("mazecetric");
         Self {
             kernel: MOORE_NEIGHBORHOOD,
             count_neighbor: count_true_neighbor,
-            next_state: |state, neighbors| {
+            next_state: Box::new(|state, neighbors| {
                 match (state, neighbors) {
                     (false, 3) => true,
                     (true, 0) => false,
                     (true, n) if n < 5 => true,
                     _ => false,
                 }
-            },
+            }),
         }
+    }
+
+    #[must_use]
+    fn generate_bb3_moore() -> Self {
+        let mut rng = thread_rng();
+
+        let birth = Self::generate_neighbor_counts(&mut rng);
+        let survive = Self::generate_neighbor_counts(&mut rng);
+
+        println_info(format!("generated: Birth {birth:?} Survival {survive:?}"));
+
+        Self {
+            kernel: MOORE_NEIGHBORHOOD,
+            count_neighbor: count_true_neighbor,
+            next_state: Box::new(move |old_state, neighbors| {
+                old_state && survive.contains(&neighbors)
+                    || !old_state && birth.contains(&neighbors)
+            }),
+        }
+    }
+
+    fn generate_neighbor_counts(rng: &mut ThreadRng) -> Vec<i32> {
+        let count_birth = rng.gen_range(0..=8);
+
+        let mut birth = vec!();
+        for _ in 0..count_birth {
+            loop {
+                let candidate = rng.gen_range(0..=8);
+
+                if !birth.contains(&candidate) {
+                    birth.push(candidate);
+                    break;
+                }
+            }
+        }
+
+        birth
     }
 }
 
@@ -135,7 +181,7 @@ impl Rules<u8, bool, 3> {
             count_neighbor: |state, kernel| {
                 if kernel && state == u8::MAX { 1 } else { 0 }
             },
-            next_state: |state, neighbors| {
+            next_state: Box::new(|state, neighbors| {
                 match (state, neighbors) {
                     (ALIVE, _) => DYING,
                     (DYING, _) => DEAD,
@@ -146,7 +192,7 @@ impl Rules<u8, bool, 3> {
                         DEAD
                     }
                 }
-            },
+            }),
         }
     }
 
@@ -158,7 +204,7 @@ impl Rules<u8, bool, 3> {
             count_neighbor: |state, kernel| {
                 if kernel && state >= u8::MAX / 2 { 1 } else { 0 }
             },
-            next_state: |old_state, neighbors| {
+            next_state: Box::new(|old_state, neighbors| {
                 let is_alive = old_state >= u8::MAX / 2;
                 let delta = match (is_alive, neighbors) {
                     (true, 2) | (true, 3) | (false, 3) => 10,
@@ -166,7 +212,7 @@ impl Rules<u8, bool, 3> {
                 };
 
                 i32::clamp(old_state as i32 + delta, u8::MIN as i32, u8::MAX as i32) as u8
-            },
+            }),
         }
     }
 
@@ -182,7 +228,7 @@ impl Rules<u8, bool, 3> {
                     0
                 }
             },
-            next_state: |old_state, neighbors| {
+            next_state: Box::new(|old_state, neighbors| {
                 if old_state % 42 == 0 {
                     return u8::MAX;
                 }
@@ -199,7 +245,7 @@ impl Rules<u8, bool, 3> {
                 };
 
                 i32::clamp(old_state as i32 + delta, u8::MIN as i32, u8::MAX as i32) as u8
-            },
+            }),
         }
     }
 }
