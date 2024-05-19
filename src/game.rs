@@ -1,111 +1,64 @@
-use rand::Rng;
-use servicepoint2::{ByteGrid, PixelGrid, TILE_HEIGHT, TILE_WIDTH};
+use servicepoint2::Grid;
 
-pub(crate) struct Game {
-    pub field: PixelGrid,
-    pub luma: ByteGrid,
-    pub high_life: Option<bool>,
+use crate::rules::Rules;
+
+pub(crate) struct Game<TState, TGrid, TKernel, const KERNEL_SIZE: usize>
+    where TGrid: Grid<TState>, TState: Copy + PartialEq, TKernel: Copy
+{
+    pub field: TGrid,
+    pub rules: Rules<TState, TKernel, KERNEL_SIZE>,
 }
 
-impl Game {
+impl<TState, TGrid, TKernel, const KERNEL_SIZE: usize> Game<TState, TGrid, TKernel, KERNEL_SIZE>
+    where TGrid: Grid<TState>, TState: Copy + PartialEq, TKernel: Copy
+{
     pub fn step(&mut self) {
-        let mut rng = rand::thread_rng();
-
         self.field = self.field_iteration();
-
-        if rng.gen_ratio(1, 10) {
-            self.luma = self.luma_iteration();
-        }
     }
 
-    fn field_iteration(&self) -> PixelGrid {
-        let mut next = self.field.clone();
+    fn field_iteration(&self) -> TGrid {
+        let mut next = TGrid::new(self.field.width(), self.field.height());
         for x in 0..self.field.width() {
             for y in 0..self.field.height() {
                 let old_state = self.field.get(x, y);
                 let neighbors = self.count_neighbors(x, y);
-
-                let new_state = match (old_state, neighbors) {
-                    (true, 2) | (true, 3) | (false, 3) => true,
-                    (false, 6) => match self.high_life {
-                        None => false,
-                        Some(true) => true,
-                        Some(false) => self.luma.get(x / 8, y / 8) > 128
-                    },
-                    _ => false,
-                };
-
+                let new_state = (self.rules.next_state)(old_state, neighbors);
                 next.set(x, y, new_state);
             }
         }
         next
     }
 
-    fn count_neighbors(&self, x: usize, y: usize) -> u8 {
+    fn count_neighbors(&self, x: usize, y: usize) -> i32 {
         let x = x as i32;
         let y = y as i32;
         let mut count = 0;
-        for nx in x - 1..=x + 1 {
-            for ny in y - 1..=y + 1 {
-                if nx == x && ny == y {
-                    continue; // the cell itself does not count
-                }
 
-                if nx < 0
-                    || ny < 0
-                    || nx >= self.field.width() as i32
-                    || ny >= self.field.height() as i32
+        let kernel = &self.rules.kernel;
+        assert_eq!(KERNEL_SIZE % 2, 1);
+        let offset = KERNEL_SIZE as i32 / 2;
+
+        for (kernel_y, kernel_row) in kernel.iter().enumerate() {
+            let offset_y = kernel_y as i32 - offset;
+
+            for (kernel_x, kernel_value) in kernel_row.iter().enumerate() {
+                let offset_x = kernel_x as i32 - offset;
+                let neighbor_x = x + offset_x;
+                let neighbor_y = y + offset_y;
+
+                if neighbor_x < 0
+                    || neighbor_y < 0
+                    || neighbor_x >= self.field.width() as i32
+                    || neighbor_y >= self.field.height() as i32
                 {
                     continue; // pixels outside the grid do not count
                 }
 
-                if !self.field.get(nx as usize, ny as usize) {
-                    continue; // dead cells do not count
-                }
-
-                count += 1;
+                let neighbor_state = self.field.get(neighbor_x as usize, neighbor_y as usize);
+                count += (self.rules.count_neighbor)(neighbor_state, *kernel_value);
             }
         }
 
         count
-    }
-
-    fn luma_iteration(&self) -> ByteGrid {
-        let mut rng = rand::thread_rng();
-
-        let min_size = 1;
-        let window_x = rng.gen_range(0..TILE_WIDTH as usize - min_size);
-        let window_y = rng.gen_range(0..TILE_HEIGHT as usize - min_size);
-
-        let w = rng.gen_range(min_size..=TILE_WIDTH as usize - window_x);
-        let h = rng.gen_range(min_size..=TILE_HEIGHT as usize - window_y);
-
-        let mut new_luma = self.luma.clone();
-        for inner_y in 0..h {
-            for inner_x in 0..w {
-                let x = window_x + inner_x;
-                let y = window_y + inner_y;
-                let old_value = self.luma.get(x, y);
-                let new_value = i32::clamp(
-                    old_value as i32 + rng.gen_range(-64..=64),
-                    u8::MIN as i32,
-                    u8::MAX as i32,
-                ) as u8;
-
-                new_luma.set(x, y, new_value);
-            }
-        }
-
-        new_luma
-    }
-}
-
-impl Default for Game {
-    fn default() -> Self {
-        Self {
-            field: PixelGrid::max_sized(),
-            luma: ByteGrid::new(TILE_WIDTH as usize, TILE_HEIGHT as usize),
-            high_life: None,
-        }
     }
 }
