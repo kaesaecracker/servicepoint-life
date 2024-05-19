@@ -17,7 +17,7 @@ use servicepoint2::Command::{BitmapLinearWin, CharBrightness};
 
 use crate::game::Game;
 use crate::print::{println_debug, println_info, println_warning};
-use crate::rules::Rules;
+use crate::rules::{generate_bb3, generate_u8b3};
 
 mod game;
 mod rules;
@@ -33,19 +33,19 @@ fn main() {
     let connection = init();
 
     let mut left_pixels = Game {
-        rules: Rules::random_bb3(),
+        rules: generate_bb3(),
         field: PixelGrid::max_sized(),
     };
     let mut right_pixels = Game {
-        rules: Rules::random_bb3(),
+        rules: generate_bb3(),
         field: PixelGrid::max_sized(),
     };
     let mut left_luma = Game {
-        rules: Rules::random_u8b3(),
+        rules: generate_u8b3(),
         field: ByteGrid::new(TILE_WIDTH, TILE_HEIGHT),
     };
     let mut right_luma = Game {
-        rules: Rules::random_u8b3(),
+        rules: generate_u8b3(),
         field: ByteGrid::new(TILE_WIDTH, TILE_HEIGHT),
     };
 
@@ -65,8 +65,10 @@ fn main() {
     loop {
         let start = Instant::now();
 
-        left_pixels.step();
-        right_pixels.step();
+        if iteration % Wrapping(5) == Wrapping(0) {
+            left_pixels.step();
+            right_pixels.step();
+        }
 
         left_luma.step();
         right_luma.step();
@@ -81,8 +83,8 @@ fn main() {
 
             randomize(&mut left_pixels.field);
             randomize(&mut left_luma.field);
-            left_pixels.rules = Rules::random_bb3();
-            left_luma.rules = Rules::random_u8b3();
+            left_pixels.rules = generate_bb3();
+            left_luma.rules = generate_u8b3();
         } else if split_speed < 0 && split_pixel == 0 {
             split_pixel = pixels.width();
 
@@ -91,8 +93,8 @@ fn main() {
 
             randomize(&mut right_pixels.field);
             randomize(&mut right_luma.field);
-            right_pixels.rules = Rules::random_bb3();
-            right_luma.rules = Rules::random_u8b3();
+            right_pixels.rules = generate_bb3();
+            right_luma.rules = generate_u8b3();
         }
 
         split_pixel = i32::clamp(split_pixel as i32 + split_speed, 0, pixels.width() as i32) as usize;
