@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rand::{Rng, thread_rng};
 use rand::rngs::ThreadRng;
 
@@ -37,16 +39,18 @@ pub fn count_true_neighbor(neighbor_state: bool, kernel_value: bool) -> i32
 impl Rules<bool, bool, 3> {
     #[must_use]
     pub fn random_bb3() -> Self {
-        match rand::thread_rng().gen_range(0..=6) {
+        Self::generate_bb3()
+
+        /*
+        match rand::thread_rng().gen_range(0..=5) {
             0 => Self::game_of_life(),
             1 => Self::high_life(),
             2 => Self::seeds(),
             3 => Self::day_and_night(),
             4 => Self::mazecetric(),
-            5 => Self::generate_bb3_moore(),
-            6 => Self::generate_bb3_neumann(),
+            5 => Self::generate_bb3(),
             _ => panic!(),
-        }
+        }*/
     }
 
     #[must_use]
@@ -123,16 +127,20 @@ impl Rules<bool, bool, 3> {
     }
 
     #[must_use]
-    pub fn generate_bb3_moore() -> Self {
+    pub fn generate_bb3() -> Self {
         let mut rng = thread_rng();
 
-        let birth = Self::generate_neighbor_counts(rng.gen_range(0..=8), &mut rng);
-        let survive = Self::generate_neighbor_counts(rng.gen_range(0..=8), &mut rng);
+        let is_moore = rng.gen_bool(1.0 / 2.0);
+        let kernel = if is_moore { MOORE_NEIGHBORHOOD } else { NEUMANN_NEIGHBORHOOD };
+        let max_neighbors = if is_moore { 8 } else { 4 };
 
-        println_info(format!("generated bb3 moore: Birth {birth:?} Survival {survive:?}"));
+        let birth = generate_neighbor_counts(rng.gen_range(1..=max_neighbors), &mut rng);
+        let survive = generate_neighbor_counts(rng.gen_range(1..=max_neighbors), &mut rng);
+
+        println_info(format!("generated bb3 moore: Birth {birth:?} Survival {survive:?}, is moore: {is_moore}"));
 
         Self {
-            kernel: MOORE_NEIGHBORHOOD,
+            kernel,
             count_neighbor: count_true_neighbor,
             next_state: Box::new(move |old_state, neighbors| {
                 old_state && survive.contains(&neighbors)
@@ -140,52 +148,28 @@ impl Rules<bool, bool, 3> {
             }),
         }
     }
+}
 
-    #[must_use]
-    pub fn generate_bb3_neumann() -> Rules<bool, bool, 3> {
-        let mut rng = thread_rng();
-
-        let birth = Self::generate_neighbor_counts(rng.gen_range(0..=4), &mut rng);
-        let survive = Self::generate_neighbor_counts(rng.gen_range(0..=4), &mut rng);
-
-        println_info(format!("generated bb3 neumann: Birth {birth:?} Survival {survive:?}"));
-
-        Self {
-            kernel: NEUMANN_NEIGHBORHOOD,
-            count_neighbor: count_true_neighbor,
-            next_state: Box::new(move |old_state, neighbors| {
-                old_state && survive.contains(&neighbors)
-                    || !old_state && birth.contains(&neighbors)
-            }),
-        }
+fn generate_neighbor_counts(count: u8, rng: &mut ThreadRng) -> HashSet<i32> {
+    let mut result = HashSet::new();
+    for _ in 0..count {
+        result.insert(rng.gen_range(0..=count) as i32);
     }
-
-    fn generate_neighbor_counts(count: u8, rng: &mut ThreadRng) -> Vec<i32> {
-        let mut result = vec!();
-        for _ in 0..count {
-            loop {
-                let candidate = rng.gen_range(0..=8);
-
-                if !result.contains(&candidate) {
-                    result.push(candidate);
-                    break;
-                }
-            }
-        }
-
-        result
-    }
+    result
 }
 
 impl Rules<u8, bool, 3> {
     #[must_use]
     pub fn random_u8b3() -> Self {
+        Self::generate_u8b3()
+        /*
         match rand::thread_rng().gen_range(0..3) {
             0 => Self::brians_brain(),
             1 => Self::continuous_game_of_life(),
             2 => Self::equalizer(),
             _ => panic!(),
         }
+        */
     }
 
     #[must_use]
@@ -213,7 +197,6 @@ impl Rules<u8, bool, 3> {
             }),
         }
     }
-
 
     #[must_use]
     pub fn continuous_game_of_life() -> Self {
@@ -262,6 +245,40 @@ impl Rules<u8, bool, 3> {
                     -10
                 };
 
+                i32::clamp(old_state as i32 + delta, u8::MIN as i32, u8::MAX as i32) as u8
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn generate_u8b3() -> Self {
+        let mut rng = thread_rng();
+
+        let is_moore = rng.gen_bool(1.0 / 2.0);
+        let kernel = if is_moore { MOORE_NEIGHBORHOOD } else { NEUMANN_NEIGHBORHOOD };
+        let max_neighbors = if is_moore { 8 } else { 4 };
+
+        let alive_threshold = rng.gen();
+
+        let birth = generate_neighbor_counts(rng.gen_range(1..=max_neighbors), &mut rng);
+        let survive = generate_neighbor_counts(rng.gen_range(1..=max_neighbors), &mut rng);
+
+        let add= rng.gen_range(5..40);
+        let sub = rng.gen_range(5..40);
+
+        println_info(format!("generated bb3 moore: Birth {birth:?} Survival {survive:?}, is moore: {is_moore}"));
+
+        Self {
+            kernel,
+            count_neighbor: |state, kernel| {
+                if kernel { state as i32 } else { 0 }
+            },
+            next_state: Box::new(move |old_state, neighbors| {
+                let neighbors = neighbors / alive_threshold as i32;
+                let old_is_alive = old_state >= alive_threshold;
+                let new_is_alive = old_is_alive && survive.contains(&neighbors)
+                    || !old_is_alive && birth.contains(&neighbors);
+                let delta = if new_is_alive { add as i32 } else { -(sub as i32) };
                 i32::clamp(old_state as i32 + delta, u8::MIN as i32, u8::MAX as i32) as u8
             }),
         }
