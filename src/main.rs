@@ -12,7 +12,7 @@ use crossterm::terminal::{
 use log::LevelFilter;
 use rand::distributions::{Distribution, Standard};
 use rand::Rng;
-use servicepoint2::{ByteGrid, CompressionCode, Connection, FRAME_PACING, Grid, Origin, PIXEL_WIDTH, PixelGrid, TILE_HEIGHT, TILE_WIDTH};
+use servicepoint2::{ByteGrid, CompressionCode, Connection, FRAME_PACING, Grid, Origin, PixelGrid, TILE_HEIGHT, TILE_WIDTH};
 use servicepoint2::Command::{BitmapLinearWin, CharBrightness};
 
 use crate::game::Game;
@@ -57,8 +57,8 @@ fn main() {
     let mut pixels = PixelGrid::max_sized();
     let mut luma = ByteGrid::new(TILE_WIDTH, TILE_HEIGHT);
 
-    let mut split_pixel = PIXEL_WIDTH / 2;
-    let mut split_speed = 1;
+    let mut split_pixel = 0;
+    let mut split_speed: i32 = 1;
 
     let mut iteration = Wrapping(0u8);
 
@@ -72,34 +72,49 @@ fn main() {
         right_luma.step();
 
         iteration += Wrapping(1u8);
-        split_pixel = usize::clamp(split_pixel + split_speed, 0, pixels.width() - 1);
+
+        if split_speed > 0 && split_pixel == pixels.width() {
+            split_pixel = 0;
+            (left_luma, right_luma) = (right_luma, left_luma);
+            (left_pixels, right_pixels) = (right_pixels, left_pixels);
+            randomize(&mut left_pixels.field);
+            randomize(&mut left_luma.field);
+        } else if split_speed < 0 && split_pixel == 0 {
+            split_pixel = pixels.width();
+            (left_luma, right_luma) = (right_luma, left_luma);
+            (left_pixels, right_pixels) = (right_pixels, left_pixels);
+            randomize(&mut right_pixels.field);
+            randomize(&mut right_luma.field);
+        }
+
+        split_pixel = i32::clamp(split_pixel as i32 + split_speed, 0, pixels.width() as i32) as usize;
 
         draw_pixels(&mut pixels, &left_pixels.field, &right_pixels.field, split_pixel);
         draw_luma(&mut luma, &left_luma.field, &right_luma.field, split_pixel / 8);
         send_to_screen(&connection, &pixels, &luma);
 
         while event::poll(Duration::from_secs(0)).expect("could not poll") {
-            match parse_event(event::read().expect("could not read event")) {
-                AppEvent::None => {}
-                AppEvent::RandomizeLeftPixels => {
+            match event::read().expect("could not read event").try_into() {
+                Err(_) => {}
+                Ok(AppEvent::RandomizeLeftPixels) => {
                     randomize(&mut left_pixels.field);
                 }
-                AppEvent::RandomizeRightPixels => {
+                Ok(AppEvent::RandomizeRightPixels) => {
                     randomize(&mut right_pixels.field);
                 }
-                AppEvent::RandomizeLeftLuma => {
+                Ok(AppEvent::RandomizeLeftLuma) => {
                     randomize(&mut left_luma.field);
                 }
-                AppEvent::RandomizeRightLuma => {
+                Ok(AppEvent::RandomizeRightLuma) => {
                     randomize(&mut right_luma.field);
                 }
-                AppEvent::Accelerate => {
+                Ok(AppEvent::Accelerate) => {
                     split_speed += 1;
                 }
-                AppEvent::Decelerate => {
+                Ok(AppEvent::Decelerate) => {
                     split_speed -= 1;
                 }
-                AppEvent::Close => {
+                Ok(AppEvent::Close) => {
                     de_init();
                     return;
                 }
@@ -115,7 +130,6 @@ fn main() {
 }
 
 enum AppEvent {
-    None,
     Close,
     RandomizeLeftPixels,
     RandomizeRightPixels,
@@ -125,56 +139,60 @@ enum AppEvent {
     Decelerate,
 }
 
-fn parse_event(event: Event) -> AppEvent {
-    match event {
-        Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-            match key_event.code {
-                KeyCode::Char('h') => {
-                    println_info("[h] help");
-                    println_info("[q] quit");
-                    println_info("[d] randomize left pixels");
-                    println_info("[e] randomize left luma");
-                    println_info("[r] randomize right pixels");
-                    println_info("[f] randomize right luma");
-                    println_info("[→] move divider right");
-                    println_info("[←] move divider left");
-                    AppEvent::None
-                }
-                KeyCode::Char('q') => {
-                    println_warning("terminating");
-                    AppEvent::Close
-                }
-                KeyCode::Char('d') => {
-                    println_debug("randomizing left pixels");
-                    AppEvent::RandomizeLeftPixels
-                }
-                KeyCode::Char('e') => {
-                    println_info("randomizing left luma");
-                    AppEvent::RandomizeLeftLuma
-                }
-                KeyCode::Char('f') => {
-                    println_info("randomizing right pixels");
-                    AppEvent::RandomizeRightPixels
-                }
-                KeyCode::Char('r') => {
-                    println_info("randomizing right luma");
-                    AppEvent::RandomizeRightLuma
-                }
-                KeyCode::Right => {
-                    AppEvent::Accelerate
-                }
-                KeyCode::Left => {
-                    AppEvent::Decelerate
-                }
-                key_code => {
-                    println_debug(format!("unhandled KeyCode {key_code:?}"));
-                    AppEvent::None
+impl TryFrom<Event> for AppEvent {
+    type Error = ();
+
+    fn try_from(event: Event) -> Result<Self, Self::Error> {
+        match event {
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                match key_event.code {
+                    KeyCode::Char('h') => {
+                        println_info("[h] help");
+                        println_info("[q] quit");
+                        println_info("[d] randomize left pixels");
+                        println_info("[e] randomize left luma");
+                        println_info("[r] randomize right pixels");
+                        println_info("[f] randomize right luma");
+                        println_info("[→] accelerate divider right");
+                        println_info("[←] accelerate divider left");
+                        Err(())
+                    }
+                    KeyCode::Char('q') => {
+                        println_warning("terminating");
+                        Ok(AppEvent::Close)
+                    }
+                    KeyCode::Char('d') => {
+                        println_debug("randomizing left pixels");
+                        Ok(AppEvent::RandomizeLeftPixels)
+                    }
+                    KeyCode::Char('e') => {
+                        println_info("randomizing left luma");
+                        Ok(AppEvent::RandomizeLeftLuma)
+                    }
+                    KeyCode::Char('f') => {
+                        println_info("randomizing right pixels");
+                        Ok(AppEvent::RandomizeRightPixels)
+                    }
+                    KeyCode::Char('r') => {
+                        println_info("randomizing right luma");
+                        Ok(AppEvent::RandomizeRightLuma)
+                    }
+                    KeyCode::Right => {
+                        Ok(AppEvent::Accelerate)
+                    }
+                    KeyCode::Left => {
+                        Ok(AppEvent::Decelerate)
+                    }
+                    key_code => {
+                        println_debug(format!("unhandled KeyCode {key_code:?}"));
+                        Err(())
+                    }
                 }
             }
-        }
-        event => {
-            println_debug(format!("unhandled event {event:?}"));
-            AppEvent::None
+            event => {
+                println_debug(format!("unhandled event {event:?}"));
+                Err(())
+            }
         }
     }
 }
@@ -196,7 +214,7 @@ fn draw_luma(luma: &mut ByteGrid, left: &ByteGrid, right: &ByteGrid, split_tile:
             let set = if x == split_tile {
                 255
             } else {
-                left_or_right.get(x, y)
+                u8::max(48, left_or_right.get(x, y))
             };
             luma.set(x, y, set);
         }
@@ -233,14 +251,18 @@ fn init() -> Connection {
         .parse_default_env()
         .init();
 
-    execute!(stdout(), EnterAlternateScreen, EnableLineWrap).expect("could not enter alternate screen");
-    enable_raw_mode().expect("could not enable raw terminal mode");
+    execute!(stdout(), EnterAlternateScreen, EnableLineWrap)
+        .expect("could not enter alternate screen");
+    enable_raw_mode()
+        .expect("could not enable raw terminal mode");
 
     Connection::open(Cli::parse().destination)
         .expect("Could not connect. Did you forget `--destination`?")
 }
 
 fn de_init() {
-    disable_raw_mode().expect("could not disable raw terminal mode");
-    execute!(stdout(), LeaveAlternateScreen).expect("could not leave alternate screen");
+    disable_raw_mode()
+        .expect("could not disable raw terminal mode");
+    execute!(stdout(), LeaveAlternateScreen)
+        .expect("could not leave alternate screen");
 }
