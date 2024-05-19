@@ -37,13 +37,14 @@ pub fn count_true_neighbor(neighbor_state: bool, kernel_value: bool) -> i32
 impl Rules<bool, bool, 3> {
     #[must_use]
     pub fn random_bb3() -> Self {
-        match rand::thread_rng().gen_range(0..=5) {
+        match rand::thread_rng().gen_range(0..=6) {
             0 => Self::game_of_life(),
             1 => Self::high_life(),
             2 => Self::seeds(),
             3 => Self::day_and_night(),
             4 => Self::mazecetric(),
             5 => Self::generate_bb3_moore(),
+            6 => Self::generate_bb3_neumann(),
             _ => panic!(),
         }
     }
@@ -122,13 +123,13 @@ impl Rules<bool, bool, 3> {
     }
 
     #[must_use]
-    fn generate_bb3_moore() -> Self {
+    pub fn generate_bb3_moore() -> Self {
         let mut rng = thread_rng();
 
-        let birth = Self::generate_neighbor_counts(&mut rng);
-        let survive = Self::generate_neighbor_counts(&mut rng);
+        let birth = Self::generate_neighbor_counts(rng.gen_range(0..=8), &mut rng);
+        let survive = Self::generate_neighbor_counts(rng.gen_range(0..=8), &mut rng);
 
-        println_info(format!("generated: Birth {birth:?} Survival {survive:?}"));
+        println_info(format!("generated bb3 moore: Birth {birth:?} Survival {survive:?}"));
 
         Self {
             kernel: MOORE_NEIGHBORHOOD,
@@ -140,22 +141,39 @@ impl Rules<bool, bool, 3> {
         }
     }
 
-    fn generate_neighbor_counts(rng: &mut ThreadRng) -> Vec<i32> {
-        let count_birth = rng.gen_range(0..=8);
+    #[must_use]
+    pub fn generate_bb3_neumann() -> Rules<bool, bool, 3> {
+        let mut rng = thread_rng();
 
-        let mut birth = vec!();
-        for _ in 0..count_birth {
+        let birth = Self::generate_neighbor_counts(rng.gen_range(0..=4), &mut rng);
+        let survive = Self::generate_neighbor_counts(rng.gen_range(0..=4), &mut rng);
+
+        println_info(format!("generated bb3 neumann: Birth {birth:?} Survival {survive:?}"));
+
+        Self {
+            kernel: NEUMANN_NEIGHBORHOOD,
+            count_neighbor: count_true_neighbor,
+            next_state: Box::new(move |old_state, neighbors| {
+                old_state && survive.contains(&neighbors)
+                    || !old_state && birth.contains(&neighbors)
+            }),
+        }
+    }
+
+    fn generate_neighbor_counts(count: u8, rng: &mut ThreadRng) -> Vec<i32> {
+        let mut result = vec!();
+        for _ in 0..count {
             loop {
                 let candidate = rng.gen_range(0..=8);
 
-                if !birth.contains(&candidate) {
-                    birth.push(candidate);
+                if !result.contains(&candidate) {
+                    result.push(candidate);
                     break;
                 }
             }
         }
 
-        birth
+        result
     }
 }
 
