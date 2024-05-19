@@ -12,7 +12,7 @@ use crossterm::terminal::{
 use log::LevelFilter;
 use rand::distributions::{Distribution, Standard};
 use rand::Rng;
-use servicepoint2::{ByteGrid, CompressionCode, Connection, FRAME_PACING, Grid, Origin, PixelGrid, TILE_HEIGHT, TILE_WIDTH};
+use servicepoint2::{ByteGrid, CompressionCode, Connection, Grid, Origin, PixelGrid, TILE_HEIGHT, TILE_WIDTH};
 use servicepoint2::Command::{BitmapLinearWin, CharBrightness};
 
 use crate::game::Game;
@@ -33,19 +33,19 @@ fn main() {
     let connection = init();
 
     let mut left_pixels = Game {
-        rules: Rules::day_and_night(),
+        rules: Rules::random_bb3(),
         field: PixelGrid::max_sized(),
     };
     let mut right_pixels = Game {
-        rules: Rules::seeds(),
+        rules: Rules::random_bb3(),
         field: PixelGrid::max_sized(),
     };
     let mut left_luma = Game {
-        rules: Rules::continuous_game_of_life(),
+        rules: Rules::random_u8b3(),
         field: ByteGrid::new(TILE_WIDTH, TILE_HEIGHT),
     };
     let mut right_luma = Game {
-        rules: Rules::continuous_game_of_life(),
+        rules: Rules::random_u8b3(),
         field: ByteGrid::new(TILE_WIDTH, TILE_HEIGHT),
     };
 
@@ -75,16 +75,24 @@ fn main() {
 
         if split_speed > 0 && split_pixel == pixels.width() {
             split_pixel = 0;
+
             (left_luma, right_luma) = (right_luma, left_luma);
             (left_pixels, right_pixels) = (right_pixels, left_pixels);
+
             randomize(&mut left_pixels.field);
             randomize(&mut left_luma.field);
+            left_pixels.rules = Rules::random_bb3();
+            left_luma.rules = Rules::random_u8b3();
         } else if split_speed < 0 && split_pixel == 0 {
             split_pixel = pixels.width();
+
             (left_luma, right_luma) = (right_luma, left_luma);
             (left_pixels, right_pixels) = (right_pixels, left_pixels);
+
             randomize(&mut right_pixels.field);
             randomize(&mut right_luma.field);
+            right_pixels.rules = Rules::random_bb3();
+            right_luma.rules = Rules::random_u8b3();
         }
 
         split_pixel = i32::clamp(split_pixel as i32 + split_speed, 0, pixels.width() as i32) as usize;
@@ -122,9 +130,10 @@ fn main() {
         }
 
 
+        let wanted_time = Duration::from_millis(100);
         let tick_time = start.elapsed();
-        if tick_time < FRAME_PACING {
-            thread::sleep(FRAME_PACING - tick_time);
+        if tick_time < wanted_time {
+            thread::sleep(wanted_time - tick_time);
         }
     }
 }
@@ -211,11 +220,7 @@ fn draw_luma(luma: &mut ByteGrid, left: &ByteGrid, right: &ByteGrid, split_tile:
     for x in 0..luma.width() {
         let left_or_right = if x < split_tile { left } else { right };
         for y in 0..luma.height() {
-            let set = if x == split_tile {
-                255
-            } else {
-                u8::max(48, left_or_right.get(x, y))
-            };
+            let set = u8::max(48, left_or_right.get(x, y));
             luma.set(x, y, set);
         }
     }
