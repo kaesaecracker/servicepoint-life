@@ -3,14 +3,20 @@ use servicepoint2::Grid;
 use crate::rules::Rules;
 
 pub(crate) struct Game<TState, TGrid, TKernel, const KERNEL_SIZE: usize>
-    where TGrid: Grid<TState>, TState: Copy + PartialEq, TKernel: Copy
+where
+    TGrid: Grid<TState>,
+    TState: Copy + PartialEq,
+    TKernel: Copy,
 {
     pub field: TGrid,
     pub rules: Rules<TState, TKernel, KERNEL_SIZE>,
 }
 
 impl<TState, TGrid, TKernel, const KERNEL_SIZE: usize> Game<TState, TGrid, TKernel, KERNEL_SIZE>
-    where TGrid: Grid<TState>, TState: Copy + PartialEq, TKernel: Copy
+where
+    TGrid: Grid<TState>,
+    TState: Copy + PartialEq,
+    TKernel: Copy,
 {
     pub fn step(&mut self) {
         self.field = self.field_iteration();

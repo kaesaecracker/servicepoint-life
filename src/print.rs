@@ -1,6 +1,6 @@
-use std::io::stdout;
 use crossterm::queue;
 use crossterm::style::{Print, PrintStyledContent, Stylize};
+use std::io::stdout;
 
 pub fn println_info(text: impl Into<String>) {
     println_command(PrintStyledContent(text.into().white()))

@@ -12,7 +12,10 @@ use crossterm::terminal::{
 use log::LevelFilter;
 use rand::distributions::{Distribution, Standard};
 use rand::Rng;
-use servicepoint2::{ByteGrid, CompressionCode, Connection, Grid, Origin, PixelGrid, TILE_HEIGHT, TILE_WIDTH};
+use servicepoint2::{
+    ByteGrid, CompressionCode, Connection, FRAME_PACING, Grid, Origin, PixelGrid, TILE_HEIGHT,
+    TILE_WIDTH,
+};
 use servicepoint2::Command::{BitmapLinearWin, CharBrightness};
 
 use crate::game::Game;
@@ -20,12 +23,12 @@ use crate::print::{println_debug, println_info, println_warning};
 use crate::rules::{generate_bb3, generate_u8b3};
 
 mod game;
-mod rules;
 mod print;
+mod rules;
 
 #[derive(Parser, Debug)]
 struct Cli {
-    #[arg(short, long, default_value = "localhost:2342")]
+    #[arg(short, long, default_value = "172.23.42.29:2342")]
     destination: String,
 }
 
@@ -62,16 +65,18 @@ fn main() {
 
     let mut iteration = Wrapping(0u8);
 
+    let mut target_duration = FRAME_PACING;
+
     loop {
         let start = Instant::now();
 
-        if iteration % Wrapping(5) == Wrapping(0) {
-            left_pixels.step();
-            right_pixels.step();
-        }
+        left_pixels.step();
+        right_pixels.step();
 
-        left_luma.step();
-        right_luma.step();
+        if iteration % Wrapping(10) == Wrapping(0) {
+            left_luma.step();
+            right_luma.step();
+        }
 
         iteration += Wrapping(1u8);
 
@@ -97,10 +102,21 @@ fn main() {
             right_luma.rules = generate_u8b3();
         }
 
-        split_pixel = i32::clamp(split_pixel as i32 + split_speed, 0, pixels.width() as i32) as usize;
+        split_pixel =
+            i32::clamp(split_pixel as i32 + split_speed, 0, pixels.width() as i32) as usize;
 
-        draw_pixels(&mut pixels, &left_pixels.field, &right_pixels.field, split_pixel);
-        draw_luma(&mut luma, &left_luma.field, &right_luma.field, split_pixel / 8);
+        draw_pixels(
+            &mut pixels,
+            &left_pixels.field,
+            &right_pixels.field,
+            split_pixel,
+        );
+        draw_luma(
+            &mut luma,
+            &left_luma.field,
+            &right_luma.field,
+            split_pixel / 8,
+        );
         send_to_screen(&connection, &pixels, &luma);
 
         while event::poll(Duration::from_secs(0)).expect("could not poll") {
@@ -108,34 +124,47 @@ fn main() {
                 Err(_) => {}
                 Ok(AppEvent::RandomizeLeftPixels) => {
                     randomize(&mut left_pixels.field);
+                    println_debug("randomized left pixels");
                 }
                 Ok(AppEvent::RandomizeRightPixels) => {
                     randomize(&mut right_pixels.field);
+                    println_info("randomized right pixels");
                 }
                 Ok(AppEvent::RandomizeLeftLuma) => {
                     randomize(&mut left_luma.field);
+                    println_info("randomized left luma");
                 }
                 Ok(AppEvent::RandomizeRightLuma) => {
                     randomize(&mut right_luma.field);
+                    println_info("randomized right luma");
                 }
-                Ok(AppEvent::Accelerate) => {
+                Ok(AppEvent::SeparatorAccelerate) => {
                     split_speed += 1;
+                    println_info(format!("increased separator speed to {split_speed}"));
                 }
-                Ok(AppEvent::Decelerate) => {
+                Ok(AppEvent::SeparatorDecelerate) => {
                     split_speed -= 1;
+                    println_info(format!("decreased separator speed to {split_speed}"));
                 }
                 Ok(AppEvent::Close) => {
+                    println_warning("terminating");
                     de_init();
                     return;
+                }
+                Ok(AppEvent::SimulationSpeedUp) => {
+                    target_duration = target_duration.saturating_sub(Duration::from_millis(1));
+                    println_info(format!("increased simulation speed to {} ups", 1f64 / target_duration.as_secs_f64()));
+                }
+                Ok(AppEvent::SimulationSpeedDown) => {
+                    target_duration = target_duration.saturating_add(Duration::from_millis(1));
+                    println_info(format!("decreased simulation speed to {} ups", 1f64 / target_duration.as_secs_f64()));
                 }
             }
         }
 
-
-        let wanted_time = Duration::from_millis(100);
         let tick_time = start.elapsed();
-        if tick_time < wanted_time {
-            thread::sleep(wanted_time - tick_time);
+        if tick_time < target_duration {
+            thread::sleep(target_duration - tick_time);
         }
     }
 }
@@ -146,8 +175,10 @@ enum AppEvent {
     RandomizeRightPixels,
     RandomizeLeftLuma,
     RandomizeRightLuma,
-    Accelerate,
-    Decelerate,
+    SeparatorAccelerate,
+    SeparatorDecelerate,
+    SimulationSpeedUp,
+    SimulationSpeedDown,
 }
 
 impl TryFrom<Event> for AppEvent {
@@ -168,32 +199,15 @@ impl TryFrom<Event> for AppEvent {
                         println_info("[←] accelerate divider left");
                         Err(())
                     }
-                    KeyCode::Char('q') => {
-                        println_warning("terminating");
-                        Ok(AppEvent::Close)
-                    }
-                    KeyCode::Char('d') => {
-                        println_debug("randomizing left pixels");
-                        Ok(AppEvent::RandomizeLeftPixels)
-                    }
-                    KeyCode::Char('e') => {
-                        println_info("randomizing left luma");
-                        Ok(AppEvent::RandomizeLeftLuma)
-                    }
-                    KeyCode::Char('f') => {
-                        println_info("randomizing right pixels");
-                        Ok(AppEvent::RandomizeRightPixels)
-                    }
-                    KeyCode::Char('r') => {
-                        println_info("randomizing right luma");
-                        Ok(AppEvent::RandomizeRightLuma)
-                    }
-                    KeyCode::Right => {
-                        Ok(AppEvent::Accelerate)
-                    }
-                    KeyCode::Left => {
-                        Ok(AppEvent::Decelerate)
-                    }
+                    KeyCode::Char('q') => Ok(AppEvent::Close),
+                    KeyCode::Char('d') => Ok(AppEvent::RandomizeLeftPixels),
+                    KeyCode::Char('e') => Ok(AppEvent::RandomizeLeftLuma),
+                    KeyCode::Char('f') => Ok(AppEvent::RandomizeRightPixels),
+                    KeyCode::Char('r') => Ok(AppEvent::RandomizeRightLuma),
+                    KeyCode::Right => Ok(AppEvent::SeparatorAccelerate),
+                    KeyCode::Left => Ok(AppEvent::SeparatorDecelerate),
+                    KeyCode::Up => Ok(AppEvent::SimulationSpeedUp),
+                    KeyCode::Down => Ok(AppEvent::SimulationSpeedDown),
                     key_code => {
                         println_debug(format!("unhandled KeyCode {key_code:?}"));
                         Err(())
@@ -223,14 +237,16 @@ fn draw_luma(luma: &mut ByteGrid, left: &ByteGrid, right: &ByteGrid, split_tile:
         let left_or_right = if x < split_tile { left } else { right };
         for y in 0..luma.height() {
             let set = u8::max(48, left_or_right.get(x, y));
-            luma.set(x, y, set);
+
+            let set = set as f32 / u8::MAX as f32 * 12f32;
+
+            luma.set(x, y, set as u8);
         }
     }
 }
 
 fn send_to_screen(connection: &Connection, pixels: &PixelGrid, luma: &ByteGrid) {
-    let pixel_cmd =
-        BitmapLinearWin(Origin(0, 0), pixels.clone(), CompressionCode::Uncompressed);
+    let pixel_cmd = BitmapLinearWin(Origin(0, 0), pixels.clone(), CompressionCode::Uncompressed);
     connection
         .send(pixel_cmd.into())
         .expect("could not send pixels");
@@ -241,7 +257,9 @@ fn send_to_screen(connection: &Connection, pixels: &PixelGrid, luma: &ByteGrid) 
 }
 
 fn randomize<TGrid, TValue>(field: &mut TGrid)
-    where TGrid: Grid<TValue>, Standard: Distribution<TValue>
+    where
+        TGrid: Grid<TValue>,
+        Standard: Distribution<TValue>,
 {
     let mut rng = rand::thread_rng();
 
@@ -260,16 +278,13 @@ fn init() -> Connection {
 
     execute!(stdout(), EnterAlternateScreen, EnableLineWrap)
         .expect("could not enter alternate screen");
-    enable_raw_mode()
-        .expect("could not enable raw terminal mode");
+    enable_raw_mode().expect("could not enable raw terminal mode");
 
     Connection::open(Cli::parse().destination)
         .expect("Could not connect. Did you forget `--destination`?")
 }
 
 fn de_init() {
-    disable_raw_mode()
-        .expect("could not disable raw terminal mode");
-    execute!(stdout(), LeaveAlternateScreen)
-        .expect("could not leave alternate screen");
+    disable_raw_mode().expect("could not disable raw terminal mode");
+    execute!(stdout(), LeaveAlternateScreen).expect("could not leave alternate screen");
 }
