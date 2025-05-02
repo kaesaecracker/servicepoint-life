@@ -3,8 +3,6 @@ use rand::{thread_rng, Rng};
 
 use crate::print::println_info;
 
-const MAX_BRIGHTNESS: u8 = 12;
-
 pub struct Rules<TState, TKernel, const KERNEL_SIZE: usize>
 where
     TState: Copy + PartialEq,

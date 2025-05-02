@@ -1,29 +1,24 @@
-use servicepoint2::Grid;
+use servicepoint::{Grid, Value, ValueGrid};
 
 use crate::rules::Rules;
 
-pub(crate) struct Game<TState, TGrid, TKernel, const KERNEL_SIZE: usize>
+pub(crate) struct Game<TState, TKernel, const KERNEL_SIZE: usize>
 where
-    TGrid: Grid<TState>,
-    TState: Copy + PartialEq,
-    TKernel: Copy,
+    TState: Value + PartialEq,
+    TKernel: Value,
 {
-    pub field: TGrid,
+    pub field: ValueGrid<TState>,
     pub rules: Rules<TState, TKernel, KERNEL_SIZE>,
 }
 
-impl<TState, TGrid, TKernel, const KERNEL_SIZE: usize> Game<TState, TGrid, TKernel, KERNEL_SIZE>
-where
-    TGrid: Grid<TState>,
-    TState: Copy + PartialEq,
-    TKernel: Copy,
+impl<TState: Value + PartialEq, TKernel: Value, const KERNEL_SIZE: usize> Game<TState, TKernel, KERNEL_SIZE>
 {
     pub fn step(&mut self) {
         self.field = self.field_iteration();
     }
 
-    fn field_iteration(&self) -> TGrid {
-        let mut next = TGrid::new(self.field.width(), self.field.height());
+    fn field_iteration(&self) -> ValueGrid<TState> {
+        let mut next = ValueGrid::new(self.field.width(), self.field.height());
         for x in 0..self.field.width() {
             for y in 0..self.field.height() {
                 let old_state = self.field.get(x, y);

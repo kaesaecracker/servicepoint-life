@@ -1,4 +1,5 @@
 use std::io::stdout;
+use std::net::UdpSocket;
 use std::num::Wrapping;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -12,12 +13,7 @@ use crossterm::terminal::{
 use log::LevelFilter;
 use rand::distributions::{Distribution, Standard};
 use rand::Rng;
-use servicepoint2::{
-    ByteGrid, CompressionCode, Connection, FRAME_PACING, Grid, Origin, PixelGrid, TILE_HEIGHT,
-    TILE_WIDTH,
-};
-use servicepoint2::Command::{BitmapLinearWin, CharBrightness};
-
+use servicepoint::{FRAME_PACING, Grid, TILE_HEIGHT, TILE_WIDTH, Bitmap, UdpSocketExt, BitmapCommand, SendCommandExt, BrightnessGridCommand, BrightnessGrid, Brightness, ValueGrid, PIXEL_WIDTH, PIXEL_HEIGHT, ByteGrid};
 use crate::game::Game;
 use crate::print::{println_debug, println_info, println_warning};
 use crate::rules::{generate_bb3, generate_u8b3};
@@ -37,11 +33,11 @@ fn main() {
 
     let mut left_pixels = Game {
         rules: generate_bb3(),
-        field: PixelGrid::max_sized(),
+        field: ValueGrid::new(PIXEL_WIDTH, PIXEL_HEIGHT),
     };
     let mut right_pixels = Game {
         rules: generate_bb3(),
-        field: PixelGrid::max_sized(),
+        field: ValueGrid::new(PIXEL_WIDTH, PIXEL_HEIGHT),
     };
     let mut left_luma = Game {
         rules: generate_u8b3(),
@@ -57,8 +53,8 @@ fn main() {
     randomize(&mut right_luma.field);
     randomize(&mut right_pixels.field);
 
-    let mut pixels = PixelGrid::max_sized();
-    let mut luma = ByteGrid::new(TILE_WIDTH, TILE_HEIGHT);
+    let mut pixels = Bitmap::max_sized();
+    let mut luma = BrightnessGrid::new(TILE_WIDTH, TILE_HEIGHT);
 
     let mut split_pixel = 0;
     let mut split_speed: i32 = 1;
@@ -222,7 +218,7 @@ impl TryFrom<Event> for AppEvent {
     }
 }
 
-fn draw_pixels(pixels: &mut PixelGrid, left: &PixelGrid, right: &PixelGrid, split_index: usize) {
+fn draw_pixels(pixels: &mut Bitmap, left: &ValueGrid<bool>, right: &ValueGrid<bool>, split_index: usize) {
     for x in 0..pixels.width() {
         let left_or_right = if x < split_index { left } else { right };
         for y in 0..pixels.height() {
@@ -232,28 +228,22 @@ fn draw_pixels(pixels: &mut PixelGrid, left: &PixelGrid, right: &PixelGrid, spli
     }
 }
 
-fn draw_luma(luma: &mut ByteGrid, left: &ByteGrid, right: &ByteGrid, split_tile: usize) {
+fn draw_luma(luma: &mut BrightnessGrid, left: &ByteGrid, right: &ByteGrid, split_tile: usize) {
     for x in 0..luma.width() {
         let left_or_right = if x < split_tile { left } else { right };
         for y in 0..luma.height() {
-            let set = u8::max(48, left_or_right.get(x, y));
-
-            let set = set as f32 / u8::MAX as f32 * 12f32;
-
-            luma.set(x, y, set as u8);
+            let set: u8 = left_or_right.get(x, y) / u8::MAX * u8::from(Brightness::MAX);
+            let set = Brightness::try_from(set).unwrap();
+            luma.set(x, y, set);
         }
     }
 }
 
-fn send_to_screen(connection: &Connection, pixels: &PixelGrid, luma: &ByteGrid) {
-    let pixel_cmd = BitmapLinearWin(Origin(0, 0), pixels.clone(), CompressionCode::Uncompressed);
-    connection
-        .send(pixel_cmd.into())
-        .expect("could not send pixels");
-
-    connection
-        .send(CharBrightness(Origin(0, 0), luma.clone()).into())
-        .expect("could not send brightness");
+fn send_to_screen(connection: &UdpSocket, pixels: &Bitmap, luma: &BrightnessGrid) {
+    let cmd: BitmapCommand = pixels.clone().try_into().unwrap();
+    _ = connection.send_command(cmd);
+    let cmd: BrightnessGridCommand = luma.clone().try_into().unwrap();
+    _ = connection.send_command(cmd);
 }
 
 fn randomize<TGrid, TValue>(field: &mut TGrid)
@@ -270,7 +260,7 @@ fn randomize<TGrid, TValue>(field: &mut TGrid)
     }
 }
 
-fn init() -> Connection {
+fn init() -> UdpSocket {
     env_logger::builder()
         .filter_level(LevelFilter::Info)
         .parse_default_env()
@@ -280,7 +270,7 @@ fn init() -> Connection {
         .expect("could not enter alternate screen");
     enable_raw_mode().expect("could not enable raw terminal mode");
 
-    Connection::open(Cli::parse().destination)
+    UdpSocket::bind_connect(Cli::parse().destination)
         .expect("Could not connect. Did you forget `--destination`?")
 }
 
