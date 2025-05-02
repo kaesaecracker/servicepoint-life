@@ -75,10 +75,8 @@ impl Simulation {
         self.left_pixels.step();
         self.right_pixels.step();
 
-        if self.iteration % Wrapping(10) == Wrapping(0) {
-            self.left_luma.step();
-            self.right_luma.step();
-        }
+        self.left_luma.step();
+        self.right_luma.step();
 
         self.iteration += Wrapping(1u8);
 
@@ -121,7 +119,8 @@ impl Simulation {
             };
             for y in 0..luma.height() {
                 let set = left_or_right.get(x, y) as f32 / u8::MAX as f32 * u8::from(Brightness::MAX) as f32;
-                let set = Brightness::try_from(set as u8).unwrap();
+                let set = (set as u8).max(1);
+                let set = Brightness::try_from(set).unwrap();
                 luma.set(x, y, set);
             }
         }

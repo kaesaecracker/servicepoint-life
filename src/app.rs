@@ -45,7 +45,7 @@ impl App {
             connection,
             sim: Simulation::new(),
             terminated: false,
-            target_duration: FRAME_PACING,
+            target_duration: FRAME_PACING * 4,
             pixels: Bitmap::max_sized(),
             luma: BrightnessGrid::new(TILE_WIDTH, TILE_HEIGHT),
         }

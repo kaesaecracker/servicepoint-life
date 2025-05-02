@@ -12,8 +12,11 @@ pub struct Rules<T: Value>
 
 type Kernel3x3 = [[bool; 3]; 3];
 
-pub const MOORE_NEIGHBORHOOD: Kernel3x3 =
-    [[true, true, true], [true, false, true], [true, true, true]];
+pub const MOORE_NEIGHBORHOOD: Kernel3x3 =    [
+    [true, true, true],
+        [true, false, true],
+        [true, true, true]
+];
 
 pub const NEUMANN_NEIGHBORHOOD: Kernel3x3 = [
     [false, true, false],
@@ -83,8 +86,8 @@ pub fn generate_u8b3() -> Rules<u8> {
         &[],
     );
 
-    let add = rng.gen_range(5..40);
-    let sub = rng.gen_range(5..40);
+    let add = rng.gen_range(1..15);
+    let sub = rng.gen_range(1..15);
 
     println_info(format!("generated u8b3: Birth {birth:?} Survival {survive:?}, kernel: {kernel:?}, alive_thresh: {alive_threshold}, delta: {add}/{sub}"));
 
