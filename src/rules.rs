@@ -86,7 +86,7 @@ pub fn generate_u8b3() -> Rules<u8, bool, 3> {
         _ => panic!(),
     };
 
-    let alive_threshold = rng.gen();
+    let alive_threshold = u8::max(1, rng.gen());
 
     let birth = generate_neighbor_counts(rng.gen_range(1..=9), &mut rng, &[0]);
     let survive = generate_neighbor_counts(
