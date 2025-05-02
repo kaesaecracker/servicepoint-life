@@ -11,7 +11,8 @@ where
     pub rules: Rules<TState, TKernel, KERNEL_SIZE>,
 }
 
-impl<TState: Value + PartialEq, TKernel: Value, const KERNEL_SIZE: usize> Game<TState, TKernel, KERNEL_SIZE>
+impl<TState: Value + PartialEq, TKernel: Value, const KERNEL_SIZE: usize>
+    Game<TState, TKernel, KERNEL_SIZE>
 {
     pub fn step(&mut self) {
         self.field = self.field_iteration();

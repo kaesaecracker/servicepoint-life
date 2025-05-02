@@ -1,14 +1,20 @@
 [package]
 name = "servicepoint-life"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Small terminal app that generates conways game of life rules and simulates them on the servicepoint display."
+repository = "https://git.berlin.ccc.de/vinzenz/servicepoint-life"
+readme = "README.md"
+keywords = ["cccb", "cccb-servicepoint", "conway", "game-of-life", "simulation"]
+rust-version = "1.70.0"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 rand = "0.8"
-env_logger = "0.11.3"
-crossterm = "0.27.0"
-log = "0.4.21"
+env_logger = "0.11"
+crossterm = "0.29"
+log = "0.4"
 
 [dependencies.servicepoint]
 package = "servicepoint"
@@ -16,3 +22,14 @@ version = "0.14.0"
 features = ["rand"]
 git = "https://git.berlin.ccc.de/servicepoint/servicepoint/"
 branch = "next"
+
+[lints.clippy]
+incompatible_msrv = "forbid"
+
+[profile.size-optimized]
+inherits = "release"
+opt-level = 'z'     # Optimize for size
+lto = true          # Enable link-time optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations
+panic = 'abort'     # Abort on panic
+strip = true        # Strip symbols from binary

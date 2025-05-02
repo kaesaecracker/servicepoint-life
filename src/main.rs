@@ -1,22 +1,35 @@
-use std::io::stdout;
-use std::net::UdpSocket;
-use std::num::Wrapping;
-use std::thread;
-use std::time::{Duration, Instant};
-
+use std::{
+    io::stdout,
+    net::UdpSocket,
+    num::Wrapping,
+    thread,
+    time::{Duration, Instant},
+};
+use crate::{
+    game::Game,
+    print::{println_debug, println_info, println_warning},
+    rules::{generate_bb3, generate_u8b3},
+};
 use clap::Parser;
-use crossterm::{event, execute};
-use crossterm::event::{Event, KeyCode, KeyEventKind};
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnableLineWrap, EnterAlternateScreen, LeaveAlternateScreen,
+use crossterm::{
+    event,
+    event::{Event, KeyCode, KeyEventKind},
+    execute,
+    terminal::{
+        disable_raw_mode, enable_raw_mode, EnableLineWrap, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    },
 };
 use log::LevelFilter;
-use rand::distributions::{Distribution, Standard};
-use rand::Rng;
-use servicepoint::{FRAME_PACING, Grid, TILE_HEIGHT, TILE_WIDTH, Bitmap, UdpSocketExt, BitmapCommand, SendCommandExt, BrightnessGridCommand, BrightnessGrid, Brightness, ValueGrid, PIXEL_WIDTH, PIXEL_HEIGHT, ByteGrid};
-use crate::game::Game;
-use crate::print::{println_debug, println_info, println_warning};
-use crate::rules::{generate_bb3, generate_u8b3};
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
+use servicepoint::{
+    Bitmap, BitmapCommand, Brightness, BrightnessGrid, BrightnessGridCommand, ByteGrid, Grid,
+    SendCommandExt, UdpSocketExt, ValueGrid, FRAME_PACING, PIXEL_HEIGHT, PIXEL_WIDTH, TILE_HEIGHT,
+    TILE_WIDTH,
+};
 
 mod game;
 mod print;
@@ -149,11 +162,17 @@ fn main() {
                 }
                 Ok(AppEvent::SimulationSpeedUp) => {
                     target_duration = target_duration.saturating_sub(Duration::from_millis(1));
-                    println_info(format!("increased simulation speed to {} ups", 1f64 / target_duration.as_secs_f64()));
+                    println_info(format!(
+                        "increased simulation speed to {} ups",
+                        1f64 / target_duration.as_secs_f64()
+                    ));
                 }
                 Ok(AppEvent::SimulationSpeedDown) => {
                     target_duration = target_duration.saturating_add(Duration::from_millis(1));
-                    println_info(format!("decreased simulation speed to {} ups", 1f64 / target_duration.as_secs_f64()));
+                    println_info(format!(
+                        "decreased simulation speed to {} ups",
+                        1f64 / target_duration.as_secs_f64()
+                    ));
                 }
             }
         }
@@ -218,7 +237,12 @@ impl TryFrom<Event> for AppEvent {
     }
 }
 
-fn draw_pixels(pixels: &mut Bitmap, left: &ValueGrid<bool>, right: &ValueGrid<bool>, split_index: usize) {
+fn draw_pixels(
+    pixels: &mut Bitmap,
+    left: &ValueGrid<bool>,
+    right: &ValueGrid<bool>,
+    split_index: usize,
+) {
     for x in 0..pixels.width() {
         let left_or_right = if x < split_index { left } else { right };
         for y in 0..pixels.height() {
@@ -240,16 +264,16 @@ fn draw_luma(luma: &mut BrightnessGrid, left: &ByteGrid, right: &ByteGrid, split
 }
 
 fn send_to_screen(connection: &UdpSocket, pixels: &Bitmap, luma: &BrightnessGrid) {
-    let cmd: BitmapCommand = pixels.clone().try_into().unwrap();
-    _ = connection.send_command(cmd);
-    let cmd: BrightnessGridCommand = luma.clone().try_into().unwrap();
-    _ = connection.send_command(cmd);
+    let cmd: BitmapCommand = pixels.clone().into();
+    connection.send_command(cmd).unwrap();
+    let cmd: BrightnessGridCommand = luma.clone().into();
+    connection.send_command(cmd).unwrap();
 }
 
 fn randomize<TGrid, TValue>(field: &mut TGrid)
-    where
-        TGrid: Grid<TValue>,
-        Standard: Distribution<TValue>,
+where
+    TGrid: Grid<TValue>,
+    Standard: Distribution<TValue>,
 {
     let mut rng = rand::thread_rng();
 

@@ -1,5 +1,5 @@
 {
-  description = "Flake for command line interface of the ServicePoint display.";
+  description = "Flake for servicepoint-life";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
@@ -71,7 +71,7 @@
         rec {
           servicepoint-life = {
             type = "app";
-            program = "${selfPkgs.servicepoint-life}/out/servicepoint-life";
+            program = "${selfPkgs.servicepoint-life}/bin/servicepoint-life";
           };
           default = servicepoint-life;
         }
