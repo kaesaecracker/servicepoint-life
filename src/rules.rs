@@ -1,28 +1,27 @@
 use rand::rngs::ThreadRng;
 use rand::{thread_rng, Rng};
-
+use servicepoint::Value;
 use crate::print::println_info;
 
-pub struct Rules<TState, TKernel, const KERNEL_SIZE: usize>
-where
-    TState: Copy + PartialEq,
-    TKernel: Copy,
+pub struct Rules<T: Value>
 {
-    pub kernel: [[TKernel; KERNEL_SIZE]; KERNEL_SIZE],
-    pub count_neighbor: Box<dyn Fn(TState, TKernel) -> i32>,
-    pub next_state: Box<dyn Fn(TState, i32) -> TState>,
+    pub kernel: Kernel3x3,
+    pub count_neighbor: Box<dyn Fn(T, bool) -> i32>,
+    pub next_state: Box<dyn Fn(T, i32) -> T>,
 }
 
-pub const MOORE_NEIGHBORHOOD: [[bool; 3]; 3] =
+type Kernel3x3 = [[bool; 3]; 3];
+
+pub const MOORE_NEIGHBORHOOD: Kernel3x3 =
     [[true, true, true], [true, false, true], [true, true, true]];
 
-pub const NEUMANN_NEIGHBORHOOD: [[bool; 3]; 3] = [
+pub const NEUMANN_NEIGHBORHOOD: Kernel3x3 = [
     [false, true, false],
     [true, false, true],
     [false, true, false],
 ];
 
-pub const DIAGONALS_NEIGHBORHOOD: [[bool; 3]; 3] = [
+pub const DIAGONALS_NEIGHBORHOOD: Kernel3x3 = [
     [true, false, true],
     [false, false, false],
     [true, false, true],
@@ -37,16 +36,11 @@ pub fn count_true_neighbor(neighbor_state: bool, kernel_value: bool) -> i32 {
 }
 
 #[must_use]
-pub fn generate_bb3() -> Rules<bool, bool, 3> {
+pub fn generate_bb3() -> Rules<bool> {
     let mut rng = thread_rng();
 
-    let is_moore = rng.gen_bool(1.0 / 2.0);
-    let kernel = if is_moore {
-        MOORE_NEIGHBORHOOD
-    } else {
-        NEUMANN_NEIGHBORHOOD
-    };
-    let max_neighbors = if is_moore { 8 } else { 4 };
+    let kernel = choose_neighborhood(&mut rng);
+    let max_neighbors = count_max_neighbors(kernel);
 
     let birth = generate_neighbor_counts(rng.gen_range(1..=max_neighbors), &mut rng, &[0]);
     let survive = generate_neighbor_counts(rng.gen_range(1..=max_neighbors), &mut rng, &[]);
@@ -76,16 +70,10 @@ fn generate_neighbor_counts(count: u8, rng: &mut ThreadRng, exclude: &[i32]) -> 
 }
 
 #[must_use]
-pub fn generate_u8b3() -> Rules<u8, bool, 3> {
+pub fn generate_u8b3() -> Rules<u8> {
     let mut rng = thread_rng();
 
-    let kernel = match rng.gen_range(0..3) {
-        0 => MOORE_NEIGHBORHOOD,
-        1 => NEUMANN_NEIGHBORHOOD,
-        2 => DIAGONALS_NEIGHBORHOOD,
-        _ => panic!(),
-    };
-
+    let kernel = choose_neighborhood(&mut rng);
     let alive_threshold = u8::max(1, rng.gen());
 
     let birth = generate_neighbor_counts(rng.gen_range(1..=9), &mut rng, &[0]);
@@ -112,4 +100,25 @@ pub fn generate_u8b3() -> Rules<u8, bool, 3> {
             i32::clamp(old_state as i32 + delta, u8::MIN as i32, u8::MAX as i32) as u8
         }),
     }
+}
+
+fn choose_neighborhood(rng: &mut ThreadRng) -> Kernel3x3 {
+    match rng.gen_range(0..3) {
+        0 => MOORE_NEIGHBORHOOD,
+        1 => NEUMANN_NEIGHBORHOOD,
+        2 => DIAGONALS_NEIGHBORHOOD,
+        _ => unreachable!(),
+    }
+}
+
+fn count_max_neighbors<const SIZE: usize>(kernel: [[bool; SIZE]; SIZE]) -> u8 {
+    let mut result = 0;
+    for row in kernel {
+        for cell in row {
+            if cell {
+                result += 1;
+            }
+        }
+    }
+    result
 }

@@ -2,23 +2,19 @@ use servicepoint::{Grid, Value, ValueGrid};
 
 use crate::rules::Rules;
 
-pub(crate) struct Game<TState, TKernel, const KERNEL_SIZE: usize>
-where
-    TState: Value + PartialEq,
-    TKernel: Value,
+pub(crate) struct Game<T: Value>
 {
-    pub field: ValueGrid<TState>,
-    pub rules: Rules<TState, TKernel, KERNEL_SIZE>,
+    pub field: ValueGrid<T>,
+    pub rules: Rules<T>,
 }
 
-impl<TState: Value + PartialEq, TKernel: Value, const KERNEL_SIZE: usize>
-    Game<TState, TKernel, KERNEL_SIZE>
+impl<T: Value> Game<T>
 {
     pub fn step(&mut self) {
         self.field = self.field_iteration();
     }
 
-    fn field_iteration(&self) -> ValueGrid<TState> {
+    fn field_iteration(&self) -> ValueGrid<T> {
         let mut next = ValueGrid::new(self.field.width(), self.field.height());
         for x in 0..self.field.width() {
             for y in 0..self.field.height() {
@@ -37,14 +33,12 @@ impl<TState: Value + PartialEq, TKernel: Value, const KERNEL_SIZE: usize>
         let mut count = 0;
 
         let kernel = &self.rules.kernel;
-        assert_eq!(KERNEL_SIZE % 2, 1);
-        let offset = KERNEL_SIZE as i32 / 2;
 
         for (kernel_y, kernel_row) in kernel.iter().enumerate() {
-            let offset_y = kernel_y as i32 - offset;
+            let offset_y = kernel_y as i32 - 1;
 
             for (kernel_x, kernel_value) in kernel_row.iter().enumerate() {
-                let offset_x = kernel_x as i32 - offset;
+                let offset_x = kernel_x as i32 - 1;
                 let neighbor_x = x + offset_x;
                 let neighbor_y = y + offset_y;
 

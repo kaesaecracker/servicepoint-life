@@ -11,10 +11,10 @@ use servicepoint::{
 use std::num::Wrapping;
 
 pub(crate) struct Simulation {
-    pub(crate) left_pixels: Game<bool, bool, 3>,
-    pub(crate) right_pixels: Game<bool, bool, 3>,
-    pub(crate) left_luma: Game<u8, bool, 3>,
-    pub(crate) right_luma: Game<u8, bool, 3>,
+    pub(crate) left_pixels: Game<bool>,
+    pub(crate) right_pixels: Game<bool>,
+    pub(crate) left_luma: Game<u8>,
+    pub(crate) right_luma: Game<u8>,
     split_pixel: usize,
     pub(crate) split_speed: i32,
     iteration: Wrapping<u8>,
@@ -64,7 +64,7 @@ impl Simulation {
         std::mem::swap(&mut self.left_pixels, &mut self.right_pixels);
     }
 
-    fn regenerate(pixels: &mut Game<bool, bool, 3>, luma: &mut Game<u8, bool, 3>) {
+    fn regenerate(pixels: &mut Game<bool>, luma: &mut Game<u8>) {
         randomize(&mut pixels.field);
         randomize(&mut luma.field);
         pixels.rules = generate_bb3();
@@ -120,8 +120,8 @@ impl Simulation {
                 &self.right_luma.field
             };
             for y in 0..luma.height() {
-                let set: u8 = left_or_right.get(x, y) / u8::MAX * u8::from(Brightness::MAX);
-                let set = Brightness::try_from(set).unwrap();
+                let set = left_or_right.get(x, y) as f32 / u8::MAX as f32 * u8::from(Brightness::MAX) as f32;
+                let set = Brightness::try_from(set as u8).unwrap();
                 luma.set(x, y, set);
             }
         }
@@ -161,9 +161,9 @@ fn make_randomized<T: Value>(width: usize, height: usize) -> ValueGrid<T>
 where
     Standard: Distribution<T>,
 {
-    let mut pixels = ValueGrid::new(width, height);
-    randomize(&mut pixels);
-    pixels
+    let mut grid = ValueGrid::new(width, height);
+    randomize(&mut grid);
+    grid
 }
 
 fn randomize<T: Value>(field: &mut ValueGrid<T>)
