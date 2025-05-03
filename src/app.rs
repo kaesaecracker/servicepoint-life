@@ -13,7 +13,7 @@ use crossterm::{
     },
 };
 use servicepoint::{
-    Bitmap, BitmapCommand, BrightnessGrid, BrightnessGridCommand, SendCommandExt, UdpSocketExt,
+    Bitmap, BitmapCommand, BrightnessGrid, BrightnessGridCommand, UdpSocketExt,
     FRAME_PACING, TILE_HEIGHT, TILE_WIDTH,
 };
 use std::{

@@ -18,8 +18,7 @@ crossterm = "0.29"
 package = "servicepoint"
 version = "0.14.0"
 features = ["rand"]
-git = "https://git.berlin.ccc.de/servicepoint/servicepoint/"
-branch = "next"
+default-features = false
 
 [lints.clippy]
 incompatible_msrv = "forbid"
